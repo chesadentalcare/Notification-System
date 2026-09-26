@@ -9,9 +9,21 @@ import { logger } from './infrastructure/logger.js';
 const container = buildContainer();
 const app = Fastify({ logger: false });
 
+// Origins always allowed regardless of env: local dev (Vite) + the deployed admin
+// console. Extra origins can still be added via CORS_ORIGIN (comma-separated), or '*'.
+const DEFAULT_ALLOWED_ORIGINS = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'https://notifications.chesadentalcare.com',
+];
+
 const corsOrigin = container.env.CORS_ORIGIN.trim();
+const envOrigins =
+  corsOrigin === '*' ? [] : corsOrigin.split(',').map((o) => o.trim()).filter(Boolean);
+const allowedOrigins = Array.from(new Set([...DEFAULT_ALLOWED_ORIGINS, ...envOrigins]));
+
 app.register(cors, {
-  origin: corsOrigin === '*' ? true : corsOrigin.split(',').map((o) => o.trim()),
+  origin: corsOrigin === '*' ? true : allowedOrigins,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'X-API-Key', 'X-Admin-Token', 'Authorization'],
 });
