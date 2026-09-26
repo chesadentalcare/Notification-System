@@ -76,4 +76,4 @@ SELECT 'production-expense-approved-payment', 'email',
   </table>
 </body>
 </html>'
-WHERE NOT EXISTS (SELECT 1 FROM templates WHERE template_key = ''production-expense-approved-payment'' AND channel = ''email'');
+WHERE NOT EXISTS (SELECT 1 FROM templates WHERE template_key = 'production-expense-approved-payment' AND channel = 'email');
