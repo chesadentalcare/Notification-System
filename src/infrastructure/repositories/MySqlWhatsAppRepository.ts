@@ -29,17 +29,18 @@ interface ThreadRow extends RowDataPacket {
   at: Date;
 }
 
-// Reads the shared WhatsApp log maintained by chesa_api_gateway
-// (<sourceDb>.whatsapp_inbound / whatsapp_outbound) so every conversation is
-// visible here, and appends this service's own sends to whatsapp_outbound.
+// Reads the shared WhatsApp log so every conversation is visible here: inbound from
+// the telecaller store, outbound from chesa's store. Appends this service's own sends
+// to the outbound table. Both are read-only except inserting our outbound rows.
 export class MySqlWhatsAppRepository implements WhatsAppRepository {
   private readonly inbound: string;
   private readonly outbound: string;
 
-  constructor(private readonly pool: DbPool, sourceDb: string) {
-    const db = /^[A-Za-z0-9_]+$/.test(sourceDb) ? sourceDb : 'production_dashboard';
-    this.inbound = `\`${db}\`.whatsapp_inbound`;
-    this.outbound = `\`${db}\`.whatsapp_outbound`;
+  constructor(private readonly pool: DbPool, inboundDb: string, outboundDb: string) {
+    const inDb = /^[A-Za-z0-9_]+$/.test(inboundDb) ? inboundDb : 'telecaller_crm_staging';
+    const outDb = /^[A-Za-z0-9_]+$/.test(outboundDb) ? outboundDb : 'production_dashboard';
+    this.inbound = `\`${inDb}\`.whatsapp_inbound`;
+    this.outbound = `\`${outDb}\`.whatsapp_outbound`;
   }
 
   async saveOutbound(row: WhatsAppOutboundInput): Promise<number> {
@@ -104,7 +105,7 @@ export class MySqlWhatsAppRepository implements WhatsAppRepository {
 
     const [rows] = await this.pool.query<ThreadRow[]>(
       `SELECT * FROM (
-         SELECT 'in' AS direction, body, msg_type, NULL AS status, NULL AS sent_by, received_at AS at
+         SELECT 'in' AS direction, body, NULL AS msg_type, NULL AS status, NULL AS sent_by, received_at AS at
            FROM ${this.inbound}
           WHERE RIGHT(REGEXP_REPLACE(from_phone, '[^0-9]', ''), 10) = ?
          UNION ALL

@@ -42,7 +42,7 @@ export const buildContainer = (): Container => {
   const queue = new BullMqQueueAdapter(env);
   const renderer = new HandlebarsRenderer(templates);
 
-  const whatsappRepo = new MySqlWhatsAppRepository(pool, env.WHATSAPP_SOURCE_DB);
+  const whatsappRepo = new MySqlWhatsAppRepository(pool, env.WHATSAPP_INBOUND_DB, env.WHATSAPP_OUTBOUND_DB);
   const whatsappService = new WhatsAppService(env, whatsappRepo, logger);
 
   const channels = new ChannelRegistry()

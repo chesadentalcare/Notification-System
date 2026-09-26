@@ -31,9 +31,11 @@ const EnvSchema = z.object({
   WHATSAPP_WABA_ID: z.string().default('533013446553813'),
   WHATSAPP_ACCESS_TOKEN: z.string().default(''),
   WHATSAPP_DEFAULT_COUNTRY_CODE: z.string().default('91'),
-  // Existing shared WhatsApp log written by chesa_api_gateway; this service reads
-  // it (all conversations) and appends its own sends to whatsapp_outbound.
-  WHATSAPP_SOURCE_DB: z.string().default('production_dashboard'),
+  // Existing shared WhatsApp log (read-only): inbound messages are persisted by the
+  // telecaller service, outbound by chesa_api_gateway. This service reads both to show
+  // all conversations, and appends its own sends to the outbound DB.
+  WHATSAPP_INBOUND_DB: z.string().default('telecaller_crm_staging'),
+  WHATSAPP_OUTBOUND_DB: z.string().default('production_dashboard'),
   NOTIFY_DRY_RUN: z
     .string()
     .default('0')

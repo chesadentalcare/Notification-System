@@ -7,14 +7,16 @@ telecaller service.
 ## Architecture (why nothing else had to change)
 
 WhatsApp for the whole company runs on one Meta WABA (phone id `500138309848954`).
-`chesa_api_gateway` is the single Meta webhook receiver and it logs everything into the
-shared MySQL tables `production_dashboard.whatsapp_inbound` / `whatsapp_outbound`.
+`chesa_api_gateway` is the single Meta webhook receiver. Outbound is logged to
+`production_dashboard.whatsapp_outbound`; inbound is forwarded to the telecaller service
+and persisted in `telecaller_crm_staging.whatsapp_inbound`.
 
 This service plugs in **read-mostly**:
 
-- **See all conversations** — the admin inbox reads the shared
-  `production_dashboard.whatsapp_inbound` + `whatsapp_outbound` tables directly
-  (configurable via `WHATSAPP_SOURCE_DB`). No forwarder, no webhook here.
+- **See all conversations** — the admin inbox reads inbound from
+  `telecaller_crm_staging.whatsapp_inbound` and outbound from
+  `production_dashboard.whatsapp_outbound` (read-only; DBs set via `WHATSAPP_INBOUND_DB`
+  / `WHATSAPP_OUTBOUND_DB`). No forwarder, no webhook here.
 - **Send** — outbound goes straight to the Meta Cloud API (same WABA), and each send is
   appended to the shared `whatsapp_outbound`. Because chesa's existing webhook updates
   `whatsapp_outbound` by `wa_message_id`, our sends get **delivered/read status for free**
@@ -44,12 +46,13 @@ UI pages (notification-system-ui): **WhatsApp** (inbox), **WA Templates**, **Go 
 1. **Env** — in `/var/www/html/notification-service/.env` set:
    ```
    WHATSAPP_ACCESS_TOKEN=<Meta system-user token — same one chesa uses>
-   WHATSAPP_SOURCE_DB=production_dashboard
+   WHATSAPP_INBOUND_DB=telecaller_crm_staging
+   WHATSAPP_OUTBOUND_DB=production_dashboard
    # phone id / WABA id / version already default to the live values; override only if they change
    ```
 2. **DB grant** — the notify DB user must be able to read the shared log and append sends:
    ```sql
-   GRANT SELECT ON production_dashboard.whatsapp_inbound  TO '<notify_db_user>'@'localhost';
+   GRANT SELECT ON telecaller_crm_staging.whatsapp_inbound TO '<notify_db_user>'@'localhost';
    GRANT SELECT, INSERT ON production_dashboard.whatsapp_outbound TO '<notify_db_user>'@'localhost';
    FLUSH PRIVILEGES;
    ```
