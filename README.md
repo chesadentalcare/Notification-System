@@ -70,3 +70,28 @@ Register a client app: `INSERT INTO api_clients (name, api_key_hash) VALUES ('sa
 1. `src/infrastructure/channels/WhatsAppChannel.ts` implementing `NotificationChannel` against the existing provider (`WHATSAPP_URL`).
 2. One line in `composition/container.ts`: `.register(new WhatsAppChannel(env))`.
 3. Templates with `channel='whatsapp'`. No other file changes.
+
+## Admin API (for `notification-system-ui`)
+
+A separate, token-protected surface powers the admin console. It lives under
+`/api/v1/admin/*`, is guarded by the `X-Admin-Token` header (env `ADMIN_TOKEN`),
+and is CORS-enabled (`CORS_ORIGIN`). The existing client send API (`X-API-Key`)
+is untouched.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/v1/admin/me` | Validate the admin token (login probe) |
+| GET | `/api/v1/admin/stats` | Dashboard counters + daily volume |
+| GET | `/api/v1/admin/channels` | Channels + config readiness |
+| GET | `/api/v1/admin/notifications` | List (filters: `status,channel,clientId,templateKey,q,limit,offset`) |
+| GET | `/api/v1/admin/notifications/:id` | Detail + attempt history |
+| POST | `/api/v1/admin/notifications` | Admin-initiated send |
+| GET/POST/PUT/DELETE | `/api/v1/admin/templates[/:id]` | Template CRUD |
+| GET/POST/PATCH | `/api/v1/admin/clients[/:id]` | Client list / create (one-time key) / enable-disable |
+
+New env vars (see `.env.example`):
+
+```
+ADMIN_TOKEN=dev-admin-token          # shared secret the admin UI signs in with
+CORS_ORIGIN=http://localhost:5173    # allowed browser origin(s), or *
+```
