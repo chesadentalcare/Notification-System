@@ -24,6 +24,18 @@ const EnvSchema = z.object({
   FCM_PROJECT_ID: z.string().default(''),
   FCM_CLIENT_EMAIL: z.string().default(''),
   FCM_PRIVATE_KEY: z.string().default(''),
+  // WhatsApp (Meta Graph API / WABA) — same account chesa_api_gateway uses.
+  WHATSAPP_API_BASE: z.string().default('https://graph.facebook.com'),
+  WHATSAPP_API_VERSION: z.string().default('v21.0'),
+  WHATSAPP_PHONE_NUMBER_ID: z.string().default('500138309848954'),
+  WHATSAPP_WABA_ID: z.string().default('533013446553813'),
+  WHATSAPP_ACCESS_TOKEN: z.string().default(''),
+  WHATSAPP_DEFAULT_COUNTRY_CODE: z.string().default('91'),
+  // Existing shared WhatsApp log (read-only): inbound messages are persisted by the
+  // telecaller service, outbound by chesa_api_gateway. This service reads both to show
+  // all conversations, and appends its own sends to the outbound DB.
+  WHATSAPP_INBOUND_DB: z.string().default('telecaller_crm_staging'),
+  WHATSAPP_OUTBOUND_DB: z.string().default('production_dashboard'),
   NOTIFY_DRY_RUN: z
     .string()
     .default('0')
