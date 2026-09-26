@@ -71,17 +71,17 @@ export class MySqlWhatsAppRepository implements WhatsAppRepository {
     const [rows] = await this.pool.query<ConversationRow[]>(
       `SELECT t.phone AS phone, t.at AS last_at, t.direction AS last_direction, t.body AS last_body
          FROM (
-           SELECT RIGHT(REGEXP_REPLACE(from_phone, '[^0-9]', ''), 10) AS phone,
-                  received_at AS at, 'in' AS direction, body FROM ${this.inbound}
+           SELECT RIGHT(REGEXP_REPLACE(from_phone, '[^0-9]', ''), 10) COLLATE utf8mb4_general_ci AS phone,
+                  received_at AS at, 'in' AS direction, body COLLATE utf8mb4_general_ci AS body FROM ${this.inbound}
            UNION ALL
-           SELECT RIGHT(REGEXP_REPLACE(to_phone, '[^0-9]', ''), 10) AS phone,
-                  sent_at AS at, 'out' AS direction, body FROM ${this.outbound}
+           SELECT RIGHT(REGEXP_REPLACE(to_phone, '[^0-9]', ''), 10) COLLATE utf8mb4_general_ci AS phone,
+                  sent_at AS at, 'out' AS direction, body COLLATE utf8mb4_general_ci AS body FROM ${this.outbound}
          ) t
          JOIN (
            SELECT phone, MAX(at) AS max_at FROM (
-             SELECT RIGHT(REGEXP_REPLACE(from_phone, '[^0-9]', ''), 10) AS phone, received_at AS at FROM ${this.inbound}
+             SELECT RIGHT(REGEXP_REPLACE(from_phone, '[^0-9]', ''), 10) COLLATE utf8mb4_general_ci AS phone, received_at AS at FROM ${this.inbound}
              UNION ALL
-             SELECT RIGHT(REGEXP_REPLACE(to_phone, '[^0-9]', ''), 10) AS phone, sent_at AS at FROM ${this.outbound}
+             SELECT RIGHT(REGEXP_REPLACE(to_phone, '[^0-9]', ''), 10) COLLATE utf8mb4_general_ci AS phone, sent_at AS at FROM ${this.outbound}
            ) u GROUP BY phone
          ) m ON m.phone = t.phone AND m.max_at = t.at
          ${qFilter}
@@ -105,11 +105,13 @@ export class MySqlWhatsAppRepository implements WhatsAppRepository {
 
     const [rows] = await this.pool.query<ThreadRow[]>(
       `SELECT * FROM (
-         SELECT 'in' AS direction, body, NULL AS msg_type, NULL AS status, NULL AS sent_by, received_at AS at
+         SELECT 'in' AS direction, body COLLATE utf8mb4_general_ci AS body, NULL AS msg_type,
+                NULL AS status, NULL AS sent_by, received_at AS at
            FROM ${this.inbound}
           WHERE RIGHT(REGEXP_REPLACE(from_phone, '[^0-9]', ''), 10) = ?
          UNION ALL
-         SELECT 'out' AS direction, body, NULL AS msg_type, status, sent_by, sent_at AS at
+         SELECT 'out' AS direction, body COLLATE utf8mb4_general_ci AS body, NULL AS msg_type,
+                status COLLATE utf8mb4_general_ci AS status, sent_by COLLATE utf8mb4_general_ci AS sent_by, sent_at AS at
            FROM ${this.outbound}
           WHERE RIGHT(REGEXP_REPLACE(to_phone, '[^0-9]', ''), 10) = ?
        ) t
