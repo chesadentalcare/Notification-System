@@ -28,9 +28,12 @@ export class EmailChannel implements NotificationChannel {
     if (!this.transporter) {
       throw new Error('Email channel is not configured (SMTP_HOST missing)');
     }
+    // Optional CC: callers pass a comma-separated list via data.__cc (backward-compatible).
+    const cc = message.data?.__cc || undefined;
     const info = await this.transporter.sendMail({
       from: this.env.SMTP_FROM,
       to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
+      cc,
       subject: message.subject,
       html: message.body,
     });
