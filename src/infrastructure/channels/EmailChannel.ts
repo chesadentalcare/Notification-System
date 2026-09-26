@@ -15,6 +15,7 @@ export class EmailChannel implements NotificationChannel {
         port: env.SMTP_PORT,
         secure: env.SMTP_SECURE,
         auth: env.SMTP_USER ? { user: env.SMTP_USER, pass: env.SMTP_PASS } : undefined,
+        tls: { ciphers: 'SSLv3' }, // parity with the working chesa-microservices mailer (Office 365)
       });
     }
   }
