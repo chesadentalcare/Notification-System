@@ -18,6 +18,8 @@ export interface Container {
   queue: BullMqQueueAdapter;
   channels: ChannelRegistry;
   apiClients: MySqlApiClientRepository;
+  notifications: MySqlNotificationRepository;
+  templates: MySqlTemplateRepository;
   sendNotification: SendNotificationUseCase;
   getNotificationStatus: GetNotificationStatusUseCase;
   processNotification: ProcessNotificationUseCase;
@@ -42,6 +44,8 @@ export const buildContainer = (): Container => {
     queue,
     channels,
     apiClients,
+    notifications,
+    templates,
     sendNotification: new SendNotificationUseCase(notifications, queue),
     getNotificationStatus: new GetNotificationStatusUseCase(notifications),
     processNotification: new ProcessNotificationUseCase(notifications, renderer, channels),

@@ -1,14 +1,24 @@
 import Fastify from 'fastify';
+import cors from '@fastify/cors';
 import { buildContainer } from './composition/container.js';
 import { registerHealthRoutes } from './interfaces/http/routes/health.js';
 import { registerNotificationRoutes } from './interfaces/http/routes/notifications.js';
+import { registerAdminRoutes } from './interfaces/http/routes/admin.js';
 import { logger } from './infrastructure/logger.js';
 
 const container = buildContainer();
 const app = Fastify({ logger: false });
 
+const corsOrigin = container.env.CORS_ORIGIN.trim();
+app.register(cors, {
+  origin: corsOrigin === '*' ? true : corsOrigin.split(',').map((o) => o.trim()),
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'X-API-Key', 'X-Admin-Token', 'Authorization'],
+});
+
 registerHealthRoutes(app, container);
 registerNotificationRoutes(app, container);
+registerAdminRoutes(app, container);
 
 app.setErrorHandler((error, _request, reply) => {
   logger.error({ err: error }, 'Unhandled API error');

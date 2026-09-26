@@ -28,6 +28,10 @@ const EnvSchema = z.object({
     .string()
     .default('0')
     .transform((v) => v === 'true' || v === '1'),
+  // Admin API — protects the /api/v1/admin/* surface consumed by the admin UI.
+  ADMIN_TOKEN: z.string().default('dev-admin-token'),
+  // Comma-separated list of allowed browser origins for the admin UI. '*' allows any.
+  CORS_ORIGIN: z.string().default('*'),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

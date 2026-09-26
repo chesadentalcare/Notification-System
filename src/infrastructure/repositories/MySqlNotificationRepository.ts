@@ -27,6 +27,44 @@ interface AttemptRow extends RowDataPacket {
   created_at: Date;
 }
 
+export interface NotificationListFilters {
+  status?: string;
+  channel?: string;
+  clientId?: string;
+  templateKey?: string;
+  q?: string;
+  limit: number;
+  offset: number;
+}
+
+export interface NotificationListItem {
+  id: string;
+  clientId: string;
+  channel: string;
+  recipient: Record<string, unknown>;
+  templateKey: string;
+  status: string;
+  attempts: number;
+  lastError: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface NotificationListResult {
+  items: NotificationListItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface NotificationStats {
+  total: number;
+  today: number;
+  byStatus: Record<string, number>;
+  byChannel: Record<string, number>;
+  daily: { date: string; count: number }[];
+}
+
 const parseJson = (v: unknown): Record<string, unknown> => {
   if (v == null) return {};
   if (typeof v === 'object') return v as Record<string, unknown>;
@@ -35,6 +73,15 @@ const parseJson = (v: unknown): Record<string, unknown> => {
   } catch {
     return {};
   }
+};
+
+// MySQL DATE() may surface as a JS Date or a 'YYYY-MM-DD' string depending on the driver config.
+const formatDay = (d: unknown): string => {
+  if (typeof d === 'string') return d.slice(0, 10);
+  if (d && typeof d === 'object' && 'toISOString' in d) {
+    return (d as Date).toISOString().slice(0, 10);
+  }
+  return String(d).slice(0, 10);
 };
 
 const toProps = (row: NotificationRow): NotificationProps => ({
@@ -127,5 +174,100 @@ export class MySqlNotificationRepository implements NotificationRepository {
       providerMessageId: r.provider_message_id,
       createdAt: r.created_at,
     }));
+  }
+
+  // ---- Admin queries (read models for the admin UI) ----
+
+  async list(filters: NotificationListFilters): Promise<NotificationListResult> {
+    const where: string[] = [];
+    const params: unknown[] = [];
+    if (filters.status) {
+      where.push('status = ?');
+      params.push(filters.status);
+    }
+    if (filters.channel) {
+      where.push('channel = ?');
+      params.push(filters.channel);
+    }
+    if (filters.clientId) {
+      where.push('client_id = ?');
+      params.push(filters.clientId);
+    }
+    if (filters.templateKey) {
+      where.push('template_key = ?');
+      params.push(filters.templateKey);
+    }
+    if (filters.q) {
+      where.push('(id LIKE ? OR recipient LIKE ? OR template_key LIKE ?)');
+      const like = `%${filters.q}%`;
+      params.push(like, like, like);
+    }
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    // limit/offset are clamped integers we control, so inlining them is safe.
+    const limit = Math.min(Math.max(1, Math.trunc(filters.limit) || 25), 200);
+    const offset = Math.max(0, Math.trunc(filters.offset) || 0);
+
+    const [countRows] = await this.pool.query<(RowDataPacket & { total: number })[]>(
+      `SELECT COUNT(*) AS total FROM notifications ${whereSql}`,
+      params
+    );
+    const total = Number(countRows[0]?.total ?? 0);
+
+    const [rows] = await this.pool.query<NotificationRow[]>(
+      `SELECT * FROM notifications ${whereSql} ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`,
+      params
+    );
+    const items: NotificationListItem[] = rows.map((r) => ({
+      id: r.id,
+      clientId: r.client_id,
+      channel: r.channel,
+      recipient: parseJson(r.recipient),
+      templateKey: r.template_key,
+      status: r.status,
+      attempts: r.attempts,
+      lastError: r.last_error,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    }));
+    return { items, total, limit, offset };
+  }
+
+  async stats(): Promise<NotificationStats> {
+    const [statusRows] = await this.pool.query<(RowDataPacket & { status: string; c: number })[]>(
+      `SELECT status, COUNT(*) AS c FROM notifications GROUP BY status`
+    );
+    const [channelRows] = await this.pool.query<(RowDataPacket & { channel: string; c: number })[]>(
+      `SELECT channel, COUNT(*) AS c FROM notifications GROUP BY channel`
+    );
+    const [totalRows] = await this.pool.query<(RowDataPacket & { total: number })[]>(
+      `SELECT COUNT(*) AS total FROM notifications`
+    );
+    const [todayRows] = await this.pool.query<(RowDataPacket & { c: number })[]>(
+      `SELECT COUNT(*) AS c FROM notifications WHERE created_at >= CURDATE()`
+    );
+    const [dailyRows] = await this.pool.query<(RowDataPacket & { d: unknown; c: number })[]>(
+      `SELECT DATE(created_at) AS d, COUNT(*) AS c
+         FROM notifications
+        WHERE created_at >= (CURDATE() - INTERVAL 13 DAY)
+        GROUP BY DATE(created_at)
+        ORDER BY d`
+    );
+
+    const byStatus: Record<string, number> = {};
+    for (const r of statusRows) byStatus[r.status] = Number(r.c);
+    const byChannel: Record<string, number> = {};
+    for (const r of channelRows) byChannel[r.channel] = Number(r.c);
+    const daily = dailyRows.map((r) => ({
+      date: formatDay(r.d),
+      count: Number(r.c),
+    }));
+
+    return {
+      total: Number(totalRows[0]?.total ?? 0),
+      today: Number(todayRows[0]?.c ?? 0),
+      byStatus,
+      byChannel,
+      daily,
+    };
   }
 }
