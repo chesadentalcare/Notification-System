@@ -5,6 +5,7 @@ import { DomainError } from '../../../domain/errors/DomainErrors.js';
 import { CHANNEL_TYPES } from '../../../domain/value-objects/ChannelType.js';
 import { NOTIFICATION_STATUSES } from '../../../domain/value-objects/NotificationStatus.js';
 import { buildAdminAuthHook } from '../middleware/adminAuth.js';
+import { registerAdminWhatsAppRoutes } from './admin-whatsapp.js';
 
 const RecipientSchema = z.union([
   z.object({ email: z.string().email(), name: z.string().optional() }),
@@ -76,7 +77,7 @@ export const registerAdminRoutes = (app: FastifyInstance, container: Container):
     const readiness: Record<string, boolean> = {
       email: !!env.SMTP_HOST && !!env.SMTP_FROM,
       fcm: !!env.FCM_PROJECT_ID && !!env.FCM_CLIENT_EMAIL && !!env.FCM_PRIVATE_KEY,
-      whatsapp: false,
+      whatsapp: !!env.WHATSAPP_ACCESS_TOKEN,
     };
     return {
       dryRun: env.NOTIFY_DRY_RUN,
@@ -205,4 +206,7 @@ export const registerAdminRoutes = (app: FastifyInstance, container: Container):
     channels: CHANNEL_TYPES,
     statuses: NOTIFICATION_STATUSES,
   }));
+
+  // ---- WhatsApp inbox (conversations / thread / send) ----
+  registerAdminWhatsAppRoutes(app, container, guard);
 };
