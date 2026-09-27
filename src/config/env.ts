@@ -24,6 +24,12 @@ const EnvSchema = z.object({
   FCM_PROJECT_ID: z.string().default(''),
   FCM_CLIENT_EMAIL: z.string().default(''),
   FCM_PRIVATE_KEY: z.string().default(''),
+  // Multi-project push: JSON array string of { projectId, clientEmail, privateKey, label }.
+  // Parsed lazily (not by zod) so a malformed string doesn't crash startup validation.
+  FCM_PROJECTS: z.string().default(''),
+  // Databases holding the device-token tables + push logs for each audience.
+  FCM_EMPLOYEE_DB: z.string().default('production_dashboard'),
+  FCM_DEALER_DB: z.string().default('dealer_mobile_app'),
   // WhatsApp (Meta Graph API / WABA) — same account chesa_api_gateway uses.
   WHATSAPP_API_BASE: z.string().default('https://graph.facebook.com'),
   WHATSAPP_API_VERSION: z.string().default('v21.0'),
