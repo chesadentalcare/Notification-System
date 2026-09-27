@@ -29,6 +29,13 @@ interface ThreadRow extends RowDataPacket {
   at: Date;
 }
 
+interface CloseServiceCallRow extends RowDataPacket {
+  serviceCallId: string | number | null;
+  created_date: Date | null;
+  first_reminder_24hrs: Date | null;
+  auto_call_closed: Date | null;
+}
+
 // Reads the shared WhatsApp log so every conversation is visible here: inbound from
 // the telecaller store, outbound from chesa's store. Appends this service's own sends
 // to the outbound table. Both are read-only except inserting our outbound rows.
@@ -39,6 +46,7 @@ export class MySqlWhatsAppRepository implements WhatsAppRepository {
   private readonly custUpdate: string;
   private readonly waitingCalls: string;
   private readonly leadExt: string;
+  private readonly closeServiceCalls: string;
 
   constructor(private readonly pool: DbPool, inboundDb: string, outboundDb: string) {
     const inDb = /^[A-Za-z0-9_]+$/.test(inboundDb) ? inboundDb : 'telecaller_crm_staging';
@@ -49,6 +57,7 @@ export class MySqlWhatsAppRepository implements WhatsAppRepository {
     this.custUpdate = `\`${outDb}\`.customer_update`;
     this.waitingCalls = `\`${outDb}\`.waiting_calls`;
     this.leadExt = `\`${inDb}\`.lead_extensions`;
+    this.closeServiceCalls = `\`${outDb}\`.close_service_calls`;
   }
 
   async saveOutbound(row: WhatsAppOutboundInput): Promise<number> {
@@ -246,7 +255,7 @@ export class MySqlWhatsAppRepository implements WhatsAppRepository {
       [key, key, key]
     );
 
-    return rows.map((r) => ({
+    const items: WhatsAppThreadItem[] = rows.map((r) => ({
       direction: r.direction,
       body: r.body,
       msgType: r.msg_type,
@@ -254,5 +263,59 @@ export class MySqlWhatsAppRepository implements WhatsAppRepository {
       sentBy: r.sent_by,
       at: r.at,
     }));
+
+    // The service dashboard synthesizes "out" system bubbles from the closure/CSAT
+    // lifecycle (close_service_calls) rather than storing them in the WhatsApp log.
+    // Reproduce those here so hub threads match. Degrade to nothing if the table is
+    // missing so a schema difference never breaks the thread.
+    try {
+      const [scRows] = await this.pool.query<CloseServiceCallRow[]>(
+        `SELECT serviceCallId, created_date, first_reminder_24hrs, auto_call_closed
+           FROM ${this.closeServiceCalls}
+          WHERE RIGHT(REGEXP_REPLACE(customerPhone, '[^0-9]', ''), 10) = ?
+          ORDER BY created_date ASC`,
+        [key]
+      );
+
+      for (const r of scRows) {
+        const sc = r.serviceCallId;
+        if (r.created_date) {
+          items.push({
+            direction: 'out',
+            body: `🔔 Satisfaction check for service call #${sc}: "Are you satisfied with the resolution of your issue?" — reply “Yes, I'm satisfied” or “No, I need more help”.`,
+            msgType: 'system',
+            status: 'template',
+            sentBy: 'System · Closure request',
+            at: r.created_date,
+          });
+        }
+        if (r.first_reminder_24hrs) {
+          items.push({
+            direction: 'out',
+            body: `⏰ Reminder (24h) for service call #${sc}: please confirm if your issue is resolved — reply “Yes, I'm satisfied” or “No, I need more help”.`,
+            msgType: 'system',
+            status: 'template',
+            sentBy: 'System · 24h reminder',
+            at: r.first_reminder_24hrs,
+          });
+        }
+        if (r.auto_call_closed) {
+          items.push({
+            direction: 'out',
+            body: `🔒 Service call #${sc} was closed automatically (no response to the satisfaction check).`,
+            msgType: 'system',
+            status: 'template',
+            sentBy: 'System · Auto-closed',
+            at: r.auto_call_closed,
+          });
+        }
+      }
+    } catch {
+      // close_service_calls may be absent on some environments; degrade to nothing.
+    }
+
+    items.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
+
+    return items.slice(0, limit);
   }
 }
