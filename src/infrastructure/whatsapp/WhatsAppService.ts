@@ -37,6 +37,17 @@ interface MetaSendResponse {
   messages?: Array<{ id?: string }>;
 }
 
+// Carries the HTTP status the media proxy route should return (404 vs 502).
+export class MediaFetchError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string
+  ) {
+    super(message);
+    this.name = 'MediaFetchError';
+  }
+}
+
 const extractBodyText = (components: unknown): string => {
   if (!Array.isArray(components)) return '';
   const body = components.find(
@@ -171,6 +182,40 @@ export class WhatsAppService {
     const waMessageId = parsed.messages?.[0]?.id ?? null;
     const outboundId = await this.repo.saveOutbound({ waMessageId, toPhone: to, body, status: 'sent', sentBy });
     return { waMessageId, outboundId };
+  }
+
+  // Meta media proxy: resolve a media id to its temporary CDN url, then fetch the
+  // binary. Both calls use the same WABA access token this service already holds, so
+  // <img src> in the UI never sees the token. Returns the bytes + resolved mime type.
+  async fetchMedia(id: string): Promise<{ buffer: Buffer; mime: string }> {
+    if (!this.env.WHATSAPP_ACCESS_TOKEN) {
+      throw new Error('WhatsApp media not configured (WHATSAPP_ACCESS_TOKEN missing)');
+    }
+    const base = this.env.WHATSAPP_API_BASE.replace(/\/+$/, '');
+    const graphBase = `${base}/${this.env.WHATSAPP_API_VERSION}`;
+    const authHeader = { Authorization: `Bearer ${this.env.WHATSAPP_ACCESS_TOKEN}` };
+
+    const metaRes = await fetch(`${graphBase}/${encodeURIComponent(id)}`, { headers: authHeader });
+    const metaText = await metaRes.text();
+    if (!metaRes.ok) {
+      throw new MediaFetchError(metaRes.status === 404 ? 404 : 502, `Media lookup failed (HTTP ${metaRes.status})`);
+    }
+    let meta: { url?: string; mime_type?: string } = {};
+    try {
+      meta = metaText ? (JSON.parse(metaText) as { url?: string; mime_type?: string }) : {};
+    } catch {
+      meta = {};
+    }
+    const url = meta.url;
+    const mime = meta.mime_type || 'application/octet-stream';
+    if (!url) throw new MediaFetchError(404, 'Media not found');
+
+    const binRes = await fetch(url, { headers: authHeader });
+    if (!binRes.ok) {
+      throw new MediaFetchError(502, `Media download failed (HTTP ${binRes.status})`);
+    }
+    const arrayBuffer = await binRes.arrayBuffer();
+    return { buffer: Buffer.from(arrayBuffer), mime };
   }
 
   async listTemplates(): Promise<WhatsAppTemplateSummary[]> {
