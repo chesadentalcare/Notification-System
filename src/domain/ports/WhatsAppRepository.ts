@@ -20,12 +20,31 @@ export interface WhatsAppConversationsQuery {
   q?: string;
 }
 
+export type WhatsAppMediaKind = 'image' | 'video' | 'audio' | 'document';
+
+export interface WhatsAppThreadMedia {
+  kind: WhatsAppMediaKind;
+  url: string;
+  mime?: string | null;
+  name?: string | null;
+}
+
+export interface WhatsAppThreadButton {
+  type: string;
+  text: string;
+  url?: string | null;
+  phone?: string | null;
+}
+
 export interface WhatsAppThreadItem {
   direction: 'in' | 'out';
   body: string | null;
   msgType?: string | null;
   status?: string | null;
   sentBy?: string | null;
+  source?: string | null;
+  media?: WhatsAppThreadMedia | null;
+  buttons?: WhatsAppThreadButton[];
   at: Date;
 }
 

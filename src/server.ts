@@ -4,6 +4,7 @@ import { buildContainer } from './composition/container.js';
 import { registerHealthRoutes } from './interfaces/http/routes/health.js';
 import { registerNotificationRoutes } from './interfaces/http/routes/notifications.js';
 import { registerAdminRoutes } from './interfaces/http/routes/admin.js';
+import { registerWhatsAppMediaRoute } from './interfaces/http/routes/whatsapp-media.js';
 import { logger } from './infrastructure/logger.js';
 
 const container = buildContainer();
@@ -29,6 +30,7 @@ app.register(cors, {
 });
 
 registerHealthRoutes(app, container);
+registerWhatsAppMediaRoute(app, container);
 registerNotificationRoutes(app, container);
 registerAdminRoutes(app, container);
 
