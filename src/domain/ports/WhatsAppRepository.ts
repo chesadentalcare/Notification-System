@@ -11,6 +11,7 @@ export interface WhatsAppConversation {
   lastAt: Date;
   lastDirection: 'in' | 'out';
   lastBody: string | null;
+  name?: string | null;
 }
 
 export interface WhatsAppConversationsQuery {
