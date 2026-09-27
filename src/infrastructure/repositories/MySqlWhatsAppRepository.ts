@@ -59,7 +59,7 @@ export class MySqlWhatsAppRepository implements WhatsAppRepository {
   }
 
   async listConversations(query: WhatsAppConversationsQuery): Promise<WhatsAppConversation[]> {
-    const limit = Math.min(Math.max(1, Math.trunc(query.limit) || 25), 200);
+    const limit = Math.min(Math.max(1, Math.trunc(query.limit) || 100), 500);
     const offset = Math.max(0, Math.trunc(query.offset) || 0);
     const params: unknown[] = [];
     let qFilter = '';

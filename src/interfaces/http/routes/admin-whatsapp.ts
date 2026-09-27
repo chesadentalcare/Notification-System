@@ -4,7 +4,7 @@ import type { Container } from '../../../composition/container.js';
 import type { WhatsAppTemplateComponent } from '../../../infrastructure/whatsapp/WhatsAppService.js';
 
 const ConversationsQuerySchema = z.object({
-  limit: z.coerce.number().min(1).max(200).default(25),
+  limit: z.coerce.number().min(1).max(500).default(100),
   offset: z.coerce.number().min(0).default(0),
   q: z.string().optional(),
 });
