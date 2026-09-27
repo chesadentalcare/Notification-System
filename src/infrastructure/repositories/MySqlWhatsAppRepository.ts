@@ -38,6 +38,7 @@ export class MySqlWhatsAppRepository implements WhatsAppRepository {
   private readonly tcOutbound: string;
   private readonly custUpdate: string;
   private readonly waitingCalls: string;
+  private readonly leadExt: string;
 
   constructor(private readonly pool: DbPool, inboundDb: string, outboundDb: string) {
     const inDb = /^[A-Za-z0-9_]+$/.test(inboundDb) ? inboundDb : 'telecaller_crm_staging';
@@ -47,6 +48,7 @@ export class MySqlWhatsAppRepository implements WhatsAppRepository {
     this.tcOutbound = `\`${inDb}\`.whatsapp_messages`;
     this.custUpdate = `\`${outDb}\`.customer_update`;
     this.waitingCalls = `\`${outDb}\`.waiting_calls`;
+    this.leadExt = `\`${inDb}\`.lead_extensions`;
   }
 
   async saveOutbound(row: WhatsAppOutboundInput): Promise<number> {
@@ -85,7 +87,13 @@ export class MySqlWhatsAppRepository implements WhatsAppRepository {
            UNION ALL
            SELECT RIGHT(REGEXP_REPLACE(phone, '[^0-9]', ''), 10) COLLATE utf8mb4_general_ci AS phone,
                   sent_at AS at, 'out' AS direction,
-                  COALESCE(JSON_UNQUOTE(JSON_EXTRACT(payload, '$.message')), CONCAT('Drip: ', template_name)) COLLATE utf8mb4_general_ci AS body FROM ${this.tcOutbound}
+                  COALESCE(
+                    JSON_UNQUOTE(JSON_EXTRACT(payload, '$.message.body')),
+                    CASE WHEN JSON_TYPE(JSON_EXTRACT(payload, '$.message')) = 'STRING'
+                         THEN JSON_UNQUOTE(JSON_EXTRACT(payload, '$.message'))
+                         ELSE NULL END,
+                    CONCAT('Drip: ', template_name)
+                  ) COLLATE utf8mb4_general_ci AS body FROM ${this.tcOutbound}
          ) t
          JOIN (
            SELECT phone, MAX(at) AS max_at FROM (
@@ -120,9 +128,11 @@ export class MySqlWhatsAppRepository implements WhatsAppRepository {
     return conversations;
   }
 
-  // Resolve last-10 phone keys to a contact name, preferring the customer_update
-  // store (customer_name || doctor_name) and falling back to waiting_calls.name.
-  // Read-only, one scan per table; degrades to no-name if a table/column differs.
+  // Resolve last-10 phone keys to a contact name, preferring the service stores
+  // (customer_update.customer_name || doctor_name, then waiting_calls.name) and
+  // finally the telecaller lead (lead_extensions.customer_name, matched on the
+  // lead's phone or whatsapp_number). Read-only, one scan per table; degrades to
+  // no-name if a table/column differs.
   private async resolveNames(keys: string[]): Promise<Map<string, string>> {
     const result = new Map<string, string>();
     if (keys.length === 0) return result;
@@ -165,6 +175,35 @@ export class MySqlWhatsAppRepository implements WhatsAppRepository {
       }
     }
 
+    const stillMissing = keys.filter((k) => !result.has(k));
+    if (stillMissing.length > 0) {
+      const lePlaceholders = stillMissing.map(() => '?').join(', ');
+      try {
+        const [leRows] = await this.pool.query<Array<{ k: string; name: string | null } & RowDataPacket>>(
+          `SELECT k, name FROM (
+             SELECT RIGHT(REGEXP_REPLACE(phone, '[^0-9]', ''), 10) AS k,
+                    NULLIF(TRIM(customer_name), '') AS name, updated_at AS at
+               FROM ${this.leadExt}
+              WHERE RIGHT(REGEXP_REPLACE(phone, '[^0-9]', ''), 10) IN (${lePlaceholders})
+             UNION ALL
+             SELECT RIGHT(REGEXP_REPLACE(whatsapp_number, '[^0-9]', ''), 10) AS k,
+                    NULLIF(TRIM(customer_name), '') AS name, updated_at AS at
+               FROM ${this.leadExt}
+              WHERE RIGHT(REGEXP_REPLACE(whatsapp_number, '[^0-9]', ''), 10) IN (${lePlaceholders})
+           ) le
+           WHERE name IS NOT NULL
+           ORDER BY at DESC`,
+          [...stillMissing, ...stillMissing]
+        );
+        for (const row of leRows) {
+          const name = row.name ? String(row.name).trim() : '';
+          if (row.k && name && !result.has(row.k)) result.set(row.k, name);
+        }
+      } catch {
+        // Telecaller schema may differ; degrade to no-name.
+      }
+    }
+
     return result;
   }
 
@@ -185,7 +224,18 @@ export class MySqlWhatsAppRepository implements WhatsAppRepository {
           WHERE RIGHT(REGEXP_REPLACE(to_phone, '[^0-9]', ''), 10) = ?
          UNION ALL
          SELECT 'out' AS direction,
-                COALESCE(JSON_UNQUOTE(JSON_EXTRACT(payload, '$.message')), CONCAT('Drip: ', template_name)) COLLATE utf8mb4_general_ci AS body,
+                CONCAT(
+                  COALESCE(
+                    JSON_UNQUOTE(JSON_EXTRACT(payload, '$.message.body')),
+                    CASE WHEN JSON_TYPE(JSON_EXTRACT(payload, '$.message')) = 'STRING'
+                         THEN JSON_UNQUOTE(JSON_EXTRACT(payload, '$.message'))
+                         ELSE NULL END,
+                    CONCAT('Drip: ', template_name)
+                  ),
+                  CASE WHEN JSON_UNQUOTE(JSON_EXTRACT(payload, '$.message.documentName')) IS NOT NULL
+                       THEN CONCAT(' 📎 ', JSON_UNQUOTE(JSON_EXTRACT(payload, '$.message.documentName')))
+                       ELSE '' END
+                ) COLLATE utf8mb4_general_ci AS body,
                 template_name COLLATE utf8mb4_general_ci AS msg_type,
                 NULL AS status, NULL AS sent_by, sent_at AS at
            FROM ${this.tcOutbound}
