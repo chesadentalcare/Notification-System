@@ -48,8 +48,11 @@ export const buildContainer = (): Container => {
   const queue = new BullMqQueueAdapter(env);
   const renderer = new HandlebarsRenderer(templates);
 
-  const whatsappRepo = new MySqlWhatsAppRepository(pool, env.WHATSAPP_INBOUND_DB, env.WHATSAPP_OUTBOUND_DB);
-  const whatsappService = new WhatsAppService(env, whatsappRepo, logger);
+  let whatsappService: WhatsAppService;
+  const whatsappRepo = new MySqlWhatsAppRepository(pool, env.WHATSAPP_INBOUND_DB, env.WHATSAPP_OUTBOUND_DB, () =>
+    whatsappService.getTemplateBodies()
+  );
+  whatsappService = new WhatsAppService(env, whatsappRepo, logger);
 
   const fcmService = new FcmProjectsService(env, logger);
   const fcmRepo = new MySqlFcmRepository(pool, env.FCM_EMPLOYEE_DB, env.FCM_DEALER_DB);

@@ -56,7 +56,14 @@ const extractBodyText = (components: unknown): string => {
   return typeof body?.text === 'string' ? body.text : '';
 };
 
+// In-memory cache TTL for the Meta template-body map used to render legacy
+// telecaller drip rows whose stored payload has no body text.
+const TEMPLATE_BODIES_TTL_MS = 15 * 60_000;
+
 export class WhatsAppService {
+  private templateBodies: { at: number; map: Map<string, string> } | null = null;
+  private templateBodiesInflight: Promise<Map<string, string>> | null = null;
+
   constructor(
     private readonly env: Env,
     private readonly repo: WhatsAppRepository,
@@ -235,6 +242,38 @@ export class WhatsAppService {
         body: extractBodyText(row.components),
       };
     });
+  }
+
+  // name -> BODY component text for every WABA template, so callers can render the
+  // real message text for legacy rows that stored no body. Reuses the same token /
+  // WABA business id / graph version as listTemplates (via templatesEndpoint +
+  // authHeaders). Cached ~15 min in-memory; on any failure returns an empty map so
+  // callers degrade gracefully and never throw into a thread.
+  async getTemplateBodies(): Promise<Map<string, string>> {
+    const now = Date.now();
+    if (this.templateBodies && now - this.templateBodies.at < TEMPLATE_BODIES_TTL_MS) {
+      return this.templateBodies.map;
+    }
+    if (this.templateBodiesInflight) return this.templateBodiesInflight;
+
+    this.templateBodiesInflight = (async () => {
+      try {
+        const map = new Map<string, string>();
+        for (const t of await this.listTemplates()) {
+          if (t.name && t.body && !map.has(t.name)) map.set(t.name, t.body);
+        }
+        this.templateBodies = { at: Date.now(), map };
+        return map;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.log.warn({ channel: 'whatsapp', err: message }, 'Template bodies fetch failed');
+        return this.templateBodies?.map ?? new Map<string, string>();
+      } finally {
+        this.templateBodiesInflight = null;
+      }
+    })();
+
+    return this.templateBodiesInflight;
   }
 
   async createTemplate(input: CreateTemplateInput): Promise<unknown> {

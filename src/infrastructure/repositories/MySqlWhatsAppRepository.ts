@@ -112,9 +112,11 @@ const parsePayload = (payload: string | null): Record<string, unknown> | null =>
   }
 };
 
-// Extract readable body text from a telecaller payload (mirrors the COALESCE
-// order the conversations query uses), falling back to the template name.
-const telecallerBody = (payload: Record<string, unknown> | null, templateName: string | null): string | null => {
+// Extract the real rendered body text stored in a telecaller payload (mirrors the
+// COALESCE order the conversations query uses). Returns null when the payload has no
+// body — legacy drip rows store only {track,index}, so the body must come from the
+// Meta WABA template instead (see getThread).
+const telecallerBody = (payload: Record<string, unknown> | null): string | null => {
   if (payload) {
     const text = payload.text;
     if (typeof text === 'string' && text) return text;
@@ -127,8 +129,42 @@ const telecallerBody = (payload: Record<string, unknown> | null, templateName: s
       if (typeof body === 'string' && body) return body;
     }
   }
-  if (templateName) return `Drip: ${templateName}`;
   return null;
+};
+
+// Pull ordered template variables ({{1}},{{2}},…) out of a telecaller payload if any
+// are present. Legacy drip rows carry none, so this normally returns []. Supports a
+// flat `variables`/`params` string array or a BODY component's `parameters[].text`.
+const payloadVariables = (payload: Record<string, unknown> | null): string[] => {
+  if (!payload) return [];
+  const flat = payload.variables ?? payload.params;
+  if (Array.isArray(flat)) {
+    return flat.map((v) => (v == null ? '' : String(v)));
+  }
+  const components = payload.components;
+  if (Array.isArray(components)) {
+    const body = components.find(
+      (c) => c && typeof c === 'object' && String((c as { type?: unknown }).type ?? '').toUpperCase() === 'BODY'
+    ) as { parameters?: unknown } | undefined;
+    if (body && Array.isArray(body.parameters)) {
+      return body.parameters.map((p) => {
+        const t = p && typeof p === 'object' ? (p as { text?: unknown }).text : undefined;
+        return typeof t === 'string' ? t : '';
+      });
+    }
+  }
+  return [];
+};
+
+// Render a Meta template BODY, substituting {{1}},{{2}},… with the row's variables.
+// Any variable still unresolved is dropped and the resulting double spaces collapsed
+// so the fixed template text still reads cleanly (mirrors telecaller templateBodies).
+const renderTemplateBody = (bodyText: string, variables: string[]): string => {
+  const substituted = bodyText.replace(/\{\{\s*(\d+)\s*\}\}/g, (_match, n: string) => {
+    const v = variables[Number(n) - 1];
+    return v != null && v !== '' ? v : '';
+  });
+  return substituted.replace(/[^\S\n]{2,}/g, ' ').replace(/ +\n/g, '\n').trim();
 };
 
 // Parse media + buttons out of a telecaller payload's message object.
@@ -177,7 +213,15 @@ export class MySqlWhatsAppRepository implements WhatsAppRepository {
   private readonly leadExt: string;
   private readonly closeServiceCalls: string;
 
-  constructor(private readonly pool: DbPool, inboundDb: string, outboundDb: string) {
+  constructor(
+    private readonly pool: DbPool,
+    inboundDb: string,
+    outboundDb: string,
+    // Optional Meta WABA template-body provider (name -> BODY text). Used to render
+    // the real message text for legacy telecaller drip rows whose payload has no
+    // body. Kept optional so tests without it still work.
+    private readonly templateBodyProvider?: () => Promise<Map<string, string>>
+  ) {
     const inDb = /^[A-Za-z0-9_]+$/.test(inboundDb) ? inboundDb : 'telecaller_crm_staging';
     const outDb = /^[A-Za-z0-9_]+$/.test(outboundDb) ? outboundDb : 'production_dashboard';
     this.inbound = `\`${inDb}\`.whatsapp_inbound`;
@@ -438,12 +482,39 @@ export class MySqlWhatsAppRepository implements WhatsAppRepository {
           ORDER BY sent_at ASC`,
         [key]
       );
+
+      // Prefetch the Meta WABA template bodies once (not per row) so legacy drip rows
+      // — whose payload has no body — can show the real template text. Degrade to an
+      // empty map if the provider is absent or fails so threads never break.
+      let templateBodies = new Map<string, string>();
+      if (this.templateBodyProvider) {
+        try {
+          templateBodies = await this.templateBodyProvider();
+        } catch {
+          templateBodies = new Map<string, string>();
+        }
+      }
+
       for (const r of rows) {
         const payload = parsePayload(r.payload);
         const { media, buttons } = telecallerMediaAndButtons(payload);
+
+        // Body resolution order: real payload text → Meta template body (rendered with
+        // any payload variables) → "Drip: <name>" last-resort fallback.
+        let body = telecallerBody(payload);
+        if (body == null) {
+          const templateName = r.template_name ? String(r.template_name) : '';
+          const templateBody = templateName ? templateBodies.get(templateName) : undefined;
+          if (templateBody) {
+            body = renderTemplateBody(templateBody, payloadVariables(payload));
+          } else if (templateName) {
+            body = `Drip: ${templateName}`;
+          }
+        }
+
         items.push({
           direction: 'out',
-          body: telecallerBody(payload, r.template_name),
+          body,
           msgType: r.message_type ?? r.template_name ?? null,
           status: r.read_at ? 'read' : r.delivered_at ? 'delivered' : 'sent',
           sentBy: r.sent_by ?? null,
