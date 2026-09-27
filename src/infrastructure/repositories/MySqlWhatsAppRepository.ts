@@ -115,11 +115,17 @@ const parsePayload = (payload: string | null): Record<string, unknown> | null =>
 // Extract readable body text from a telecaller payload (mirrors the COALESCE
 // order the conversations query uses), falling back to the template name.
 const telecallerBody = (payload: Record<string, unknown> | null, templateName: string | null): string | null => {
-  const msg = payload?.message;
-  if (typeof msg === 'string' && msg) return msg;
-  if (msg && typeof msg === 'object') {
-    const body = (msg as TelecallerPayloadMessage).body;
-    if (typeof body === 'string' && body) return body;
+  if (payload) {
+    const text = payload.text;
+    if (typeof text === 'string' && text) return text;
+    const topBody = payload.body;
+    if (typeof topBody === 'string' && topBody) return topBody;
+    const msg = payload.message;
+    if (typeof msg === 'string' && msg) return msg;
+    if (msg && typeof msg === 'object') {
+      const body = (msg as TelecallerPayloadMessage).body;
+      if (typeof body === 'string' && body) return body;
+    }
   }
   if (templateName) return `Drip: ${templateName}`;
   return null;
@@ -220,10 +226,12 @@ export class MySqlWhatsAppRepository implements WhatsAppRepository {
            SELECT RIGHT(REGEXP_REPLACE(phone, '[^0-9]', ''), 10) COLLATE utf8mb4_general_ci AS phone,
                   sent_at AS at, 'out' AS direction,
                   COALESCE(
-                    JSON_UNQUOTE(JSON_EXTRACT(payload, '$.message.body')),
+                    JSON_UNQUOTE(JSON_EXTRACT(payload, '$.text')),
+                    JSON_UNQUOTE(JSON_EXTRACT(payload, '$.body')),
                     CASE WHEN JSON_TYPE(JSON_EXTRACT(payload, '$.message')) = 'STRING'
                          THEN JSON_UNQUOTE(JSON_EXTRACT(payload, '$.message'))
                          ELSE NULL END,
+                    JSON_UNQUOTE(JSON_EXTRACT(payload, '$.message.body')),
                     CONCAT('Drip: ', template_name)
                   ) COLLATE utf8mb4_general_ci AS body FROM ${this.tcOutbound}
          ) t
