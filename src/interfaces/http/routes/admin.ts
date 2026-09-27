@@ -6,6 +6,7 @@ import { CHANNEL_TYPES } from '../../../domain/value-objects/ChannelType.js';
 import { NOTIFICATION_STATUSES } from '../../../domain/value-objects/NotificationStatus.js';
 import { buildAdminAuthHook } from '../middleware/adminAuth.js';
 import { registerAdminWhatsAppRoutes } from './admin-whatsapp.js';
+import { registerAdminQueueRoutes } from './admin-queue.js';
 
 const RecipientSchema = z.union([
   z.object({ email: z.string().email(), name: z.string().optional() }),
@@ -209,4 +210,7 @@ export const registerAdminRoutes = (app: FastifyInstance, container: Container):
 
   // ---- WhatsApp inbox (conversations / thread / send) ----
   registerAdminWhatsAppRoutes(app, container, guard);
+
+  // ---- Queue / worker monitor (BullMQ stats) ----
+  registerAdminQueueRoutes(app, container, guard);
 };
