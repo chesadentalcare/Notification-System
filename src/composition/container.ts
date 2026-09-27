@@ -12,8 +12,10 @@ import { MySqlApiClientRepository } from '../infrastructure/repositories/MySqlAp
 import { MySqlNotificationRepository } from '../infrastructure/repositories/MySqlNotificationRepository.js';
 import { MySqlTemplateRepository } from '../infrastructure/repositories/MySqlTemplateRepository.js';
 import { MySqlWhatsAppRepository } from '../infrastructure/repositories/MySqlWhatsAppRepository.js';
+import { MySqlFcmRepository } from '../infrastructure/repositories/MySqlFcmRepository.js';
 import { HandlebarsRenderer } from '../infrastructure/templates/HandlebarsRenderer.js';
 import { WhatsAppService } from '../infrastructure/whatsapp/WhatsAppService.js';
+import { FcmProjectsService } from '../infrastructure/fcm/FcmProjectsService.js';
 import { logger } from '../infrastructure/logger.js';
 
 export interface Container {
@@ -27,6 +29,10 @@ export interface Container {
   whatsapp: {
     repo: MySqlWhatsAppRepository;
     service: WhatsAppService;
+  };
+  fcm: {
+    service: FcmProjectsService;
+    repo: MySqlFcmRepository;
   };
   sendNotification: SendNotificationUseCase;
   getNotificationStatus: GetNotificationStatusUseCase;
@@ -45,6 +51,9 @@ export const buildContainer = (): Container => {
   const whatsappRepo = new MySqlWhatsAppRepository(pool, env.WHATSAPP_INBOUND_DB, env.WHATSAPP_OUTBOUND_DB);
   const whatsappService = new WhatsAppService(env, whatsappRepo, logger);
 
+  const fcmService = new FcmProjectsService(env, logger);
+  const fcmRepo = new MySqlFcmRepository(pool, env.FCM_EMPLOYEE_DB, env.FCM_DEALER_DB);
+
   const channels = new ChannelRegistry()
     .register(new EmailChannel(env))
     .register(new FcmChannel(env))
@@ -59,6 +68,7 @@ export const buildContainer = (): Container => {
     notifications,
     templates,
     whatsapp: { repo: whatsappRepo, service: whatsappService },
+    fcm: { service: fcmService, repo: fcmRepo },
     sendNotification: new SendNotificationUseCase(notifications, queue),
     getNotificationStatus: new GetNotificationStatusUseCase(notifications),
     processNotification: new ProcessNotificationUseCase(notifications, renderer, channels),

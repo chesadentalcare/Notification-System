@@ -6,6 +6,8 @@ import { CHANNEL_TYPES } from '../../../domain/value-objects/ChannelType.js';
 import { NOTIFICATION_STATUSES } from '../../../domain/value-objects/NotificationStatus.js';
 import { buildAdminAuthHook } from '../middleware/adminAuth.js';
 import { registerAdminWhatsAppRoutes } from './admin-whatsapp.js';
+import { registerAdminQueueRoutes } from './admin-queue.js';
+import { registerAdminFcmRoutes } from './admin-fcm.js';
 
 const RecipientSchema = z.union([
   z.object({ email: z.string().email(), name: z.string().optional() }),
@@ -76,7 +78,7 @@ export const registerAdminRoutes = (app: FastifyInstance, container: Container):
     const registered = container.channels.registeredTypes();
     const readiness: Record<string, boolean> = {
       email: !!env.SMTP_HOST && !!env.SMTP_FROM,
-      fcm: !!env.FCM_PROJECT_ID && !!env.FCM_CLIENT_EMAIL && !!env.FCM_PRIVATE_KEY,
+      fcm: container.fcm.service.listProjects().length > 0,
       whatsapp: !!env.WHATSAPP_ACCESS_TOKEN,
     };
     return {
@@ -209,4 +211,10 @@ export const registerAdminRoutes = (app: FastifyInstance, container: Container):
 
   // ---- WhatsApp inbox (conversations / thread / send) ----
   registerAdminWhatsAppRoutes(app, container, guard);
+
+  // ---- Queue / worker monitor (BullMQ stats) ----
+  registerAdminQueueRoutes(app, container, guard);
+
+  // ---- FCM push (employees + dealers, multi-project) ----
+  registerAdminFcmRoutes(app, container, guard);
 };
