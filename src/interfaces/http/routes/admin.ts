@@ -8,6 +8,8 @@ import { buildAdminAuthHook } from '../middleware/adminAuth.js';
 import { registerAdminWhatsAppRoutes } from './admin-whatsapp.js';
 import { registerAdminQueueRoutes } from './admin-queue.js';
 import { registerAdminFcmRoutes } from './admin-fcm.js';
+import { registerAdminCustomerRoutes } from './admin-customers.js';
+import { registerAdminCareRoutes } from './admin-care.js';
 
 const RecipientSchema = z.union([
   z.object({ email: z.string().email(), name: z.string().optional() }),
@@ -217,4 +219,10 @@ export const registerAdminRoutes = (app: FastifyInstance, container: Container):
 
   // ---- FCM push (employees + dealers, multi-project) ----
   registerAdminFcmRoutes(app, container, guard);
+
+  // ---- Customer base (SAP-synced chair buyers) ----
+  registerAdminCustomerRoutes(app, container, guard);
+
+  // ---- Care campaigns (bulk care messages + complaint link) ----
+  registerAdminCareRoutes(app, container, guard);
 };
