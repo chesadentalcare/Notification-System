@@ -50,6 +50,16 @@ const EnvSchema = z.object({
   ADMIN_TOKEN: z.string().default('dev-admin-token'),
   // Comma-separated list of allowed browser origins for the admin UI. '*' allows any.
   CORS_ORIGIN: z.string().default('*'),
+  // Care campaigns — the chair-buyer base (care_customers) synced from SAP by
+  // chesa_api_gateway lives in this DB; read cross-DB on the same connection, so
+  // DB_HOST must reach it (the shared RDS) in production.
+  CUSTOMERS_DB: z.string().default('production_dashboard'),
+  // Base complaint/service-call site; care messages deep-link here (prefilled ?phone=).
+  COMPLAINT_URL: z.string().default('https://servicecalls.ashvahealthtech.com/'),
+  // Synthetic client id recorded against care-campaign notifications.
+  CARE_CLIENT_ID: z.string().default('care'),
+  // Safety cap on how many recipients a single campaign may enqueue.
+  CARE_MAX_RECIPIENTS: z.coerce.number().default(5000),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

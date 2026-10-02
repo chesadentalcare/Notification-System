@@ -13,6 +13,9 @@ import { MySqlNotificationRepository } from '../infrastructure/repositories/MySq
 import { MySqlTemplateRepository } from '../infrastructure/repositories/MySqlTemplateRepository.js';
 import { MySqlWhatsAppRepository } from '../infrastructure/repositories/MySqlWhatsAppRepository.js';
 import { MySqlFcmRepository } from '../infrastructure/repositories/MySqlFcmRepository.js';
+import { MySqlCustomerRepository } from '../infrastructure/repositories/MySqlCustomerRepository.js';
+import { MySqlCareRepository } from '../infrastructure/repositories/MySqlCareRepository.js';
+import { CareCampaignService } from '../application/CareCampaignService.js';
 import { HandlebarsRenderer } from '../infrastructure/templates/HandlebarsRenderer.js';
 import { WhatsAppService } from '../infrastructure/whatsapp/WhatsAppService.js';
 import { FcmProjectsService } from '../infrastructure/fcm/FcmProjectsService.js';
@@ -34,6 +37,9 @@ export interface Container {
     service: FcmProjectsService;
     repo: MySqlFcmRepository;
   };
+  customers: MySqlCustomerRepository;
+  care: MySqlCareRepository;
+  careService: CareCampaignService;
   sendNotification: SendNotificationUseCase;
   getNotificationStatus: GetNotificationStatusUseCase;
   processNotification: ProcessNotificationUseCase;
@@ -62,6 +68,11 @@ export const buildContainer = (): Container => {
     .register(new FcmChannel(env))
     .register(new WhatsAppChannel(whatsappService));
 
+  const sendNotification = new SendNotificationUseCase(notifications, queue);
+  const customers = new MySqlCustomerRepository(pool, env.CUSTOMERS_DB);
+  const care = new MySqlCareRepository(pool);
+  const careService = new CareCampaignService(customers, care, sendNotification, env);
+
   return {
     env,
     pool,
@@ -72,7 +83,10 @@ export const buildContainer = (): Container => {
     templates,
     whatsapp: { repo: whatsappRepo, service: whatsappService },
     fcm: { service: fcmService, repo: fcmRepo },
-    sendNotification: new SendNotificationUseCase(notifications, queue),
+    customers,
+    care,
+    careService,
+    sendNotification,
     getNotificationStatus: new GetNotificationStatusUseCase(notifications),
     processNotification: new ProcessNotificationUseCase(notifications, renderer, channels),
   };
