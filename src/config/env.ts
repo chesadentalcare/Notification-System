@@ -60,6 +60,16 @@ const EnvSchema = z.object({
   CARE_CLIENT_ID: z.string().default('care'),
   // Safety cap on how many recipients a single campaign may enqueue.
   CARE_MAX_RECIPIENTS: z.coerce.number().default(5000),
+  // Staff campaigns — the employee contact base (employees) synced from SAP by
+  // chesa_api_gateway (salary GL codes 36xxx + EmployeesInfo) lives in this DB;
+  // read cross-DB on the same connection, same as CUSTOMERS_DB.
+  EMPLOYEES_DB: z.string().default('production_dashboard'),
+  // Optional staff portal/superapp base; staff messages deep-link here when set.
+  STAFF_PORTAL_URL: z.string().default(''),
+  // Synthetic client id recorded against staff-campaign notifications.
+  STAFF_CLIENT_ID: z.string().default('staff'),
+  // Safety cap on how many recipients a single staff campaign may enqueue.
+  STAFF_MAX_RECIPIENTS: z.coerce.number().default(5000),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

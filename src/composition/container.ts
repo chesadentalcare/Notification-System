@@ -16,6 +16,9 @@ import { MySqlFcmRepository } from '../infrastructure/repositories/MySqlFcmRepos
 import { MySqlCustomerRepository } from '../infrastructure/repositories/MySqlCustomerRepository.js';
 import { MySqlCareRepository } from '../infrastructure/repositories/MySqlCareRepository.js';
 import { CareCampaignService } from '../application/CareCampaignService.js';
+import { MySqlEmployeeRepository } from '../infrastructure/repositories/MySqlEmployeeRepository.js';
+import { MySqlStaffRepository } from '../infrastructure/repositories/MySqlStaffRepository.js';
+import { StaffCampaignService } from '../application/StaffCampaignService.js';
 import { HandlebarsRenderer } from '../infrastructure/templates/HandlebarsRenderer.js';
 import { WhatsAppService } from '../infrastructure/whatsapp/WhatsAppService.js';
 import { FcmProjectsService } from '../infrastructure/fcm/FcmProjectsService.js';
@@ -40,6 +43,9 @@ export interface Container {
   customers: MySqlCustomerRepository;
   care: MySqlCareRepository;
   careService: CareCampaignService;
+  employees: MySqlEmployeeRepository;
+  staff: MySqlStaffRepository;
+  staffService: StaffCampaignService;
   sendNotification: SendNotificationUseCase;
   getNotificationStatus: GetNotificationStatusUseCase;
   processNotification: ProcessNotificationUseCase;
@@ -72,6 +78,9 @@ export const buildContainer = (): Container => {
   const customers = new MySqlCustomerRepository(pool, env.CUSTOMERS_DB);
   const care = new MySqlCareRepository(pool);
   const careService = new CareCampaignService(customers, care, sendNotification, env);
+  const employees = new MySqlEmployeeRepository(pool, env.EMPLOYEES_DB);
+  const staff = new MySqlStaffRepository(pool);
+  const staffService = new StaffCampaignService(employees, staff, sendNotification, env);
 
   return {
     env,
@@ -86,6 +95,9 @@ export const buildContainer = (): Container => {
     customers,
     care,
     careService,
+    employees,
+    staff,
+    staffService,
     sendNotification,
     getNotificationStatus: new GetNotificationStatusUseCase(notifications),
     processNotification: new ProcessNotificationUseCase(notifications, renderer, channels),
