@@ -10,6 +10,8 @@ import { registerAdminQueueRoutes } from './admin-queue.js';
 import { registerAdminFcmRoutes } from './admin-fcm.js';
 import { registerAdminCustomerRoutes } from './admin-customers.js';
 import { registerAdminCareRoutes } from './admin-care.js';
+import { registerAdminEmployeeRoutes } from './admin-employees.js';
+import { registerAdminStaffRoutes } from './admin-staff.js';
 
 const RecipientSchema = z.union([
   z.object({ email: z.string().email(), name: z.string().optional() }),
@@ -225,4 +227,10 @@ export const registerAdminRoutes = (app: FastifyInstance, container: Container):
 
   // ---- Care campaigns (bulk care messages + complaint link) ----
   registerAdminCareRoutes(app, container, guard);
+
+  // ---- Employee base (SAP-synced staff by salary GL code) ----
+  registerAdminEmployeeRoutes(app, container, guard);
+
+  // ---- Staff campaigns (bulk announcements/alerts to employees) ----
+  registerAdminStaffRoutes(app, container, guard);
 };

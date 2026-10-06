@@ -88,6 +88,28 @@ is untouched.
 | POST | `/api/v1/admin/notifications` | Admin-initiated send |
 | GET/POST/PUT/DELETE | `/api/v1/admin/templates[/:id]` | Template CRUD |
 | GET/POST/PATCH | `/api/v1/admin/clients[/:id]` | Client list / create (one-time key) / enable-disable |
+| GET/PATCH | `/api/v1/admin/customers[...]` | Customer base (SAP-synced buyers) + opt-out |
+| GET/POST | `/api/v1/admin/care/...` | Care campaigns (bulk messages to buyers) |
+| GET/PATCH | `/api/v1/admin/employees[...]` | Employee base (SAP-synced staff) + opt-out |
+| GET/POST | `/api/v1/admin/staff/...` | Staff campaigns (bulk announcements to employees) |
+
+## Audiences: customers vs. employees
+
+Two SAP-synced audiences share the same campaign machinery (queue, templates,
+retries, per-recipient audit):
+
+- **Customers** — chair buyers in `<CUSTOMERS_DB>.care_customers`; targeted by
+  company + years-since-purchase. See the care routes above.
+- **Employees** — our own team in `<EMPLOYEES_DB>.employees`, synced from SAP's
+  Ashva salary GL codes (the `36xxx` accounts under the "Salary" head) enriched
+  with `EmployeesInfo` email/phone; targeted by company + department. Push to
+  staff devices already exists separately via the FCM routes (`fcm_tokens.emp_id`).
+
+Both tables are produced by `chesa_api_gateway` and read cross-DB — the gateway
+degrades gracefully (`available: false`) when they're absent (e.g. local dev).
+Populate `employees` with `scripts/syncEmployeesOnce.js` (local/VPN, additive
+upsert — run `EMP_SYNC_DRY_RUN=1 ...` first to preview); in production this runs
+on a nightly cron next to the customer sync in `chesa_api_gateway`.
 
 New env vars (see `.env.example`):
 
