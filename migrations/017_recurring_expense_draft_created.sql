@@ -72,7 +72,7 @@ SELECT 'recurring-expense-draft-created', 'email',
 
         <!-- Footer -->
         <tr><td style="padding:18px 34px 26px; border-top:1px solid #eef2f7;">
-          <p style="margin:0; font-size:14px; color:#374151;">Regards,<br/><strong>Automated System</strong><br/>Ashva Health Tech</p>
+          <p style="margin:0; font-size:14px; color:#374151;">Regards,<br/><strong>Pappu Kumar</strong></p>
           <p style="margin:10px 0 0; font-size:11px; color:#aab3bf;">This email is sent automatically when monthly recurring expense drafts are generated.</p>
         </td></tr>
 
