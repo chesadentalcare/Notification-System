@@ -1,4 +1,4 @@
-import nodemailer, { type Transporter } from 'nodemailer';
+import nodemailer, { type Transporter, type SendMailOptions } from 'nodemailer';
 import type { DeliveryResult, NotificationChannel, RenderedMessage } from '../../domain/ports/NotificationChannel.js';
 import type { EmailRecipient } from '../../domain/value-objects/Recipient.js';
 import type { Env } from '../../config/env.js';
@@ -31,12 +31,26 @@ export class EmailChannel implements NotificationChannel {
     }
     // Optional CC: callers pass a comma-separated list via data.__cc (backward-compatible).
     const cc = message.data?.__cc || undefined;
+    // Optional attachments: callers pass a JSON array via data.__attachments, e.g.
+    // [{ "filename": "E-Invoice.pdf", "path": "https://.../document.pdf" }] — nodemailer
+    // fetches the URL/file and attaches it. Backward-compatible (ignored if absent/bad).
+    let attachments: SendMailOptions['attachments'];
+    const rawAttachments = message.data?.__attachments;
+    if (rawAttachments) {
+      try {
+        const parsed = JSON.parse(rawAttachments);
+        if (Array.isArray(parsed) && parsed.length) attachments = parsed as SendMailOptions['attachments'];
+      } catch {
+        logger.warn({ to: recipient.email }, 'ignored malformed data.__attachments');
+      }
+    }
     const info = await this.transporter.sendMail({
       from: this.env.SMTP_FROM,
       to: recipient.name ? `"${recipient.name}" <${recipient.email}>` : recipient.email,
       cc,
       subject: message.subject,
       html: message.body,
+      attachments,
     });
     return { providerMessageId: info.messageId ?? null };
   }
